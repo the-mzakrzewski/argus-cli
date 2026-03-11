@@ -1,0 +1,35 @@
+name: argus-__RUN_ID__
+
+services:
+  worker:
+    container_name: argus-worker-__RUN_ID__
+    image: argus-worker-worker:latest
+    restart: "no"
+    environment:
+      # Credentials for the ephemeral postgres container spun up per run and torn down with -v
+      DATABASE_URL: postgres://argus:argus@postgres:5432/argus?sslmode=disable
+      DDL_FILE: /test/__DDL_FILE__
+    volumes:
+      - __HOST_DIR__:/test:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    container_name: argus-postgres-__RUN_ID__
+    image: postgres:18-alpine
+    restart: "no"
+    environment:
+      POSTGRES_USER: argus
+      POSTGRES_PASSWORD: argus
+      POSTGRES_DB: argus
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argus"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:

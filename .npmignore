@@ -1,0 +1,9 @@
+.idea/
+.env
+*.local
+node_modules/
+coverage/
+.eslintrc*
+*.test.js
+test/
+tests/

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+*.local
+coverage/
+.idea/
+.vscode/
+.claude/
+dev/
+docker/
