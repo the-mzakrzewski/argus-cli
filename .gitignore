@@ -9,10 +9,15 @@ dist/
 .env
 *.local
 
+# Lock files (not used)
+package-lock.json
+yarn.lock
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
 # Test & coverage
 coverage/
