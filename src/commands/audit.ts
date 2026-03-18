@@ -2,8 +2,17 @@ import {Command} from 'commander';
 import path from 'node:path';
 import chalk from 'chalk';
 import {cleanupWorker, generateCompose, runWorker} from '../lib/docker.js';
-import {postMultipart} from '../lib/api.js';
+import {get, postMultipart} from '../lib/api.js';
+import {requireAuth} from '../lib/auth.js';
+import {getRefreshToken} from '../lib/keychain.js';
+import {getEngineBaseUrl, getHubBaseUrl} from '../config.js';
 import type {AuditCreatedResponse, AuditCreateRequest} from '../types/audit.js';
+
+interface AuditRecipe {
+    public_id: string;
+    status: string;
+    query: string;
+}
 
 export async function audit({ddlPath, queryPath}: AuditCreateRequest): Promise<void> {
     const resolvedDdl = path.resolve(ddlPath);
@@ -19,14 +28,24 @@ export async function audit({ddlPath, queryPath}: AuditCreateRequest): Promise<v
     console.log(`  ${chalk.cyan('ID')}     ${result.public_id}`);
     console.log(`  ${chalk.cyan('Status')} ${result.status}`);
 
-    const composePath = generateCompose({ddlPath: resolvedDdl});
+    const authToken = await requireAuth();
+    const refreshToken = await getRefreshToken() ?? '';
+    const composePath = generateCompose({
+        ddlPath: resolvedDdl,
+        auditId: result.public_id,
+        apiUrl: getEngineBaseUrl(),
+        authToken,
+        refreshToken,
+    });
+
     try {
         runWorker({composePath});
+
+        const recipe = await get<AuditRecipe>(`/audits/${result.public_id}/recipe`);
+        console.log(chalk.green(`✓ Benchmark complete. View report: ${getHubBaseUrl()}/audits/${recipe.public_id}`));
     } finally {
         cleanupWorker({composePath});
     }
-
-    console.log(chalk.green('Audit complete.'));
 }
 
 export function auditCommand(): Command {

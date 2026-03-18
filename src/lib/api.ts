@@ -81,6 +81,33 @@ async function handleResult<T>(result: HttpResult): Promise<T> {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+export async function get<T>(path: string): Promise<T> {
+    const jwt = await requireAuth();
+    const url = `${getEngineBaseUrl()}${path}`;
+
+    const response = await fetch(url, {
+        headers: {Authorization: `Bearer ${jwt}`},
+    });
+
+    if (response.status === 401) {
+        const newJwt = await getRefreshedToken();
+        if (!newJwt) throw new Error('Session expired. Run: argus login');
+        const retried = await fetch(url, {headers: {Authorization: `Bearer ${newJwt}`}});
+        if (!retried.ok) {
+            const body = await retried.text();
+            throw new Error(`API request failed [${retried.status}]: ${body}`);
+        }
+        return retried.json() as Promise<T>;
+    }
+
+    if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`API request failed [${response.status}]: ${body}`);
+    }
+
+    return response.json() as Promise<T>;
+}
+
 export async function postMultipart<T>(
     path: string,
     fields: Record<string, MultipartField>,
