@@ -1,8 +1,11 @@
+// audit command — runs a full benchmark audit with step-by-step spinner feedback
 import {Command} from 'commander';
 import path from 'node:path';
 import chalk from 'chalk';
-import {cleanupWorker, generateCompose, runWorker} from '../lib/docker.js';
-import {get, postMultipart} from '../lib/api.js';
+import ora from 'ora';
+import {cleanupWorker, generateCompose, runWorker, getContainerErrors} from '../lib/docker.js';
+import type {ContainerError} from '../lib/docker.js';
+import {get, post, postMultipart} from '../lib/api.js';
 import {requireAuth} from '../lib/auth.js';
 import {getRefreshToken} from '../lib/keychain.js';
 import {getEngineBaseUrl, getHubBaseUrl} from '../config.js';
@@ -19,30 +22,89 @@ export async function audit({ddlPath, queryPath}: AuditCreateRequest): Promise<v
     const resolvedQuery = path.resolve(queryPath);
     const toFileField = (filePath: string) => ({filePath, filename: path.basename(filePath)});
 
-    const result = await postMultipart<AuditCreatedResponse>('/audits', {
-        ddl: toFileField(resolvedDdl),
-        query: toFileField(resolvedQuery),
-    });
+    // Step 1: upload files
+    let spinner = ora('Uploading schema & query, creating audit…').start();
+    let result: AuditCreatedResponse;
+    try {
+        result = await postMultipart<AuditCreatedResponse>('/audits', {
+            ddl: toFileField(resolvedDdl),
+            query: toFileField(resolvedQuery),
+        });
+        spinner.succeed(`Audit created · ${chalk.cyan(result.public_id)}`);
+    } catch (err) {
+        spinner.fail((err as Error).message);
+        throw err;
+    }
 
-    console.log(chalk.bold('Audit created:'));
-    console.log(`  ${chalk.cyan('ID')}     ${result.public_id}`);
-    console.log(`  ${chalk.cyan('Status')} ${result.status}`);
+    // Step 2: verify auth
+    spinner = ora('Verifying credentials…').start();
+    let authToken: string;
+    let refreshToken: string;
+    try {
+        authToken = await requireAuth();
+        refreshToken = await getRefreshToken() ?? '';
+        spinner.succeed('Credentials verified');
+    } catch (err) {
+        spinner.fail((err as Error).message);
+        throw err;
+    }
 
-    const authToken = await requireAuth();
-    const refreshToken = await getRefreshToken() ?? '';
-    const composePath = generateCompose({
-        ddlPath: resolvedDdl,
-        auditId: result.public_id,
-        apiUrl: getEngineBaseUrl(),
-        authToken,
-        refreshToken,
-    });
+    // Step 3: prepare Docker environment
+    spinner = ora('Preparing Docker environment…').start();
+    let composePath: string;
+    try {
+        composePath = generateCompose({
+            ddlPath: resolvedDdl,
+            auditId: result.public_id,
+            apiUrl: getEngineBaseUrl(),
+            authToken,
+            refreshToken,
+        });
+        spinner.succeed('Docker environment ready');
+    } catch (err) {
+        spinner.fail((err as Error).message);
+        throw err;
+    }
 
     try {
-        runWorker({composePath});
+        // Step 4: run benchmark
+        spinner = ora('Running benchmark…').start();
+        try {
+            runWorker({composePath});
+            spinner.succeed('Benchmark complete');
+        } catch (err) {
+            spinner.fail((err as Error).message);
+            // best-effort: report each container's error to the API
+            const containerErrors = getContainerErrors(composePath);
+            if (containerErrors.length > 0) {
+                const reportSpinner = ora('Reporting errors…').start();
+                try {
+                    await Promise.all(
+                        containerErrors.map((e: ContainerError) =>
+                            post(`/audits/${result.public_id}/container-errors`, {
+                                container_name: e.containerName,
+                                error_details: e.errorDetails,
+                            }),
+                        ),
+                    );
+                    reportSpinner.succeed('Errors reported');
+                } catch {
+                    reportSpinner.warn('Could not report errors to API');
+                }
+            }
+            throw err;
+        }
 
-        const recipe = await get<AuditRecipe>(`/audits/${result.public_id}/recipe`);
-        console.log(chalk.green(`✓ Benchmark complete. View report: ${getHubBaseUrl()}/audits/${recipe.public_id}`));
+        // Step 5: fetch results
+        spinner = ora('Fetching results…').start();
+        let recipe: AuditRecipe;
+        try {
+            recipe = await get<AuditRecipe>(`/audits/${result.public_id}/recipe`);
+            spinner.succeed(`Report ready · ${chalk.cyan(`${getHubBaseUrl()}/audits/${recipe.public_id}`)}`);
+        } catch (err) {
+            spinner.fail((err as Error).message);
+            throw err;
+        }
     } finally {
         cleanupWorker({composePath});
     }

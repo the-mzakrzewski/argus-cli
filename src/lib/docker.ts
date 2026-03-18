@@ -53,15 +53,50 @@ export function generateCompose({ ddlPath, auditId, apiUrl, authToken, refreshTo
 }
 
 export function runWorker({ composePath }: WorkerOptions): void {
-  execSync(`docker compose -f ${composePath} up -d`, { stdio: 'inherit' });
-  execSync(`docker compose -f ${composePath} wait worker`, { stdio: 'inherit' });
+  execSync(`docker compose -f ${composePath} up -d`, { stdio: 'pipe' });
+  execSync(`docker compose -f ${composePath} wait worker`, { stdio: 'pipe' });
 }
 
 export function cleanupWorker({ composePath }: WorkerOptions): void {
   try {
-    // execSync(`docker compose -f ${composePath} down -v`, { stdio: 'inherit' });
-    // fs.unlinkSync(composePath);
+    execSync(`docker compose -f ${composePath} down -v`, { stdio: 'pipe' });
+    fs.unlinkSync(composePath);
   } catch {
     // best-effort cleanup
+  }
+}
+
+export interface ContainerError {
+  containerName: string;
+  errorDetails: string;
+}
+
+export function getContainerErrors(composePath: string): ContainerError[] {
+  try {
+    const psOutput = execSync(
+      `docker compose -f ${composePath} ps --format json`,
+      { stdio: 'pipe', encoding: 'utf8' },
+    );
+    const containers: Array<{ Service: string; ExitCode: number }> = psOutput
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+
+    return containers
+      .filter((c) => c.ExitCode !== 0)
+      .map((c) => {
+        try {
+          const logs = execSync(
+            `docker compose -f ${composePath} logs ${c.Service} --no-color --tail 100`,
+            { stdio: 'pipe', encoding: 'utf8' },
+          );
+          return { containerName: c.Service, errorDetails: logs.trim() || `exited with code ${c.ExitCode}` };
+        } catch {
+          return { containerName: c.Service, errorDetails: `exited with code ${c.ExitCode}` };
+        }
+      });
+  } catch {
+    return [];
   }
 }
