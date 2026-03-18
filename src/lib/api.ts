@@ -85,14 +85,16 @@ export async function get<T>(path: string): Promise<T> {
     const jwt = await requireAuth();
     const url = `${getEngineBaseUrl()}${path}`;
 
+    // Connection: close ensures a fresh TCP connection — avoids stale keep-alive
+    // connections that can form after a long-running benchmark.
     const response = await fetch(url, {
-        headers: {Authorization: `Bearer ${jwt}`},
+        headers: {Authorization: `Bearer ${jwt}`, Connection: 'close'},
     });
 
     if (response.status === 401) {
         const newJwt = await getRefreshedToken();
         if (!newJwt) throw new Error('Session expired. Run: argus login');
-        const retried = await fetch(url, {headers: {Authorization: `Bearer ${newJwt}`}});
+        const retried = await fetch(url, {headers: {Authorization: `Bearer ${newJwt}`, Connection: 'close'}});
         if (!retried.ok) {
             const body = await retried.text();
             throw new Error(`API request failed [${retried.status}]: ${body}`);
