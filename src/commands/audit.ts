@@ -6,7 +6,7 @@ import ora from 'ora';
 import {cleanupWorker, generateCompose, runWorker, getContainerErrors} from '../lib/docker.js';
 import type {ContainerError} from '../lib/docker.js';
 import {get, post, postMultipart} from '../lib/api.js';
-import {requireAuth} from '../lib/auth.js';
+import {requireAuth, refreshTokens} from '../lib/auth.js';
 import {getRefreshToken} from '../lib/keychain.js';
 import {getEngineBaseUrl, getHubBaseUrl} from '../config.js';
 import type {AuditCreatedResponse, AuditCreateRequest} from '../types/audit.js';
@@ -36,14 +36,18 @@ export async function audit({ddlPath, queryPath}: AuditCreateRequest): Promise<v
         throw err;
     }
 
-    // Step 2: verify auth
-    spinner = ora('Verifying credentials…').start();
+    // Step 2: get a fresh token to pass to containers
+    spinner = ora('Refreshing credentials…').start();
     let authToken: string;
-    let refreshToken: string;
     try {
-        authToken = await requireAuth();
-        refreshToken = await getRefreshToken() ?? '';
-        spinner.succeed('Credentials verified');
+        const storedRefreshToken = await getRefreshToken();
+        if (storedRefreshToken) {
+            authToken = await refreshTokens(storedRefreshToken);
+        } else {
+            // CI path: ARGUS_AUTH_TOKEN is set directly in env
+            authToken = await requireAuth();
+        }
+        spinner.succeed('Credentials refreshed');
     } catch (err) {
         spinner.fail((err as Error).message);
         throw err;
@@ -58,7 +62,6 @@ export async function audit({ddlPath, queryPath}: AuditCreateRequest): Promise<v
             auditId: result.public_id,
             apiUrl: getEngineBaseUrl(),
             authToken,
-            refreshToken,
         });
         spinner.succeed('Docker environment ready');
     } catch (err) {

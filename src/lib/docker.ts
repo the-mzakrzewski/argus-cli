@@ -9,7 +9,6 @@ interface GenerateComposeOptions {
   auditId: string;
   apiUrl: string;
   authToken: string;
-  refreshToken: string;
 }
 
 interface WorkerOptions {
@@ -22,7 +21,7 @@ function toContainerUrl(apiUrl: string): string {
   return apiUrl.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1)(:\d+)/, '$1host.docker.internal$3');
 }
 
-export function generateCompose({ ddlPath, auditId, apiUrl, authToken, refreshToken }: GenerateComposeOptions): string {
+export function generateCompose({ ddlPath, auditId, apiUrl, authToken }: GenerateComposeOptions): string {
   const runId = Date.now().toString();
   const composePath = path.join(os.tmpdir(), `argus-compose-${runId}.yml`);
 
@@ -38,7 +37,6 @@ export function generateCompose({ ddlPath, auditId, apiUrl, authToken, refreshTo
     ARGUS_API_URL: toContainerUrl(apiUrl),
     ARGUS_AUDIT_ID: auditId,
     ARGUS_AUTH_TOKEN: authToken,
-    ARGUS_REFRESH_TOKEN: refreshToken,
   };
 
   const seeder = services.seeder;
