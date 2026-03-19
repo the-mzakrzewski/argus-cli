@@ -17,7 +17,7 @@ interface AuditRecipe {
     query: string;
 }
 
-export async function audit({ddlPath, queryPath}: AuditCreateRequest): Promise<void> {
+export async function audit({ddlPath, queryPath, keepContainers = false}: AuditCreateRequest & { keepContainers?: boolean }): Promise<void> {
     const resolvedDdl = path.resolve(ddlPath);
     const resolvedQuery = path.resolve(queryPath);
     const toFileField = (filePath: string) => ({filePath, filename: path.basename(filePath)});
@@ -109,7 +109,12 @@ export async function audit({ddlPath, queryPath}: AuditCreateRequest): Promise<v
             throw err;
         }
     } finally {
-        cleanupWorker({composePath});
+        if (keepContainers) {
+            console.log(chalk.yellow('\nContainers left running. To clean up manually:'));
+            console.log(chalk.dim(`  docker compose -f ${composePath} down -v`));
+        } else {
+            cleanupWorker({composePath});
+        }
     }
 }
 
@@ -120,9 +125,10 @@ export function auditCommand(): Command {
         .description('Run a benchmark audit on a SQL schema')
         .requiredOption('--ddl <path>', 'Path to DDL file')
         .requiredOption('--query <path>', 'Path to query file')
-        .action(async (options: { ddl: string; query: string }) => {
+        .option('--keep-containers', 'Skip docker compose down after benchmark (containers remain running)', false)
+        .action(async (options: { ddl: string; query: string; keepContainers: boolean }) => {
             try {
-                await audit({ddlPath: options.ddl, queryPath: options.query});
+                await audit({ddlPath: options.ddl, queryPath: options.query, keepContainers: options.keepContainers});
             } catch (err) {
                 console.error(chalk.red(`Audit failed: ${(err as Error).message}`));
                 process.exit(1);
