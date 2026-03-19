@@ -1,11 +1,10 @@
-// audit command — runs a full benchmark audit with step-by-step spinner feedback
 import {Command} from 'commander';
 import path from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
 import {cleanupWorker, generateCompose, runWorker, getContainerErrors} from '../lib/docker.js';
 import type {ContainerError} from '../lib/docker.js';
-import {get, post, postMultipart} from '../lib/api.js';
+import {get, post, postMultipart, ApiError} from '../lib/api.js';
 import {requireAuth, refreshTokens} from '../lib/auth.js';
 import {getRefreshToken} from '../lib/keychain.js';
 import {getEngineBaseUrl, getHubBaseUrl} from '../config.js';
@@ -32,6 +31,10 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
         });
         spinner.succeed(`Audit created · ${chalk.cyan(result.public_id)}`);
     } catch (err) {
+        if (err instanceof ApiError && err.status === 402) {
+            spinner.fail('No credits remaining. Visit the Argus website to top up.');
+            process.exit(1);
+        }
         spinner.fail((err as Error).message);
         throw err;
     }

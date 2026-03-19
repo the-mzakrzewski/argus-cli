@@ -5,6 +5,17 @@ import {getRefreshToken} from './keychain.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export class ApiError extends Error {
+    constructor(public readonly status: number, message: string) {
+        super(message);
+        this.name = this.constructor.name;
+        Object.setPrototypeOf(this, new.target.prototype);
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, this.constructor);
+        }
+    }
+}
+
 export interface FileField {
     filePath: string;
     filename: string;
@@ -76,7 +87,7 @@ async function handleResult<T>(result: HttpResult): Promise<T> {
     if (result.kind === 'network_error') throw new Error(result.error);
     if (result.ok) return result.response.json() as Promise<T>;
     const body = await result.response.text();
-    throw new Error(`API request failed [${result.status}]: ${body}`);
+    throw new ApiError(result.status, `API request failed [${result.status}]: ${body}`);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -97,14 +108,14 @@ export async function get<T>(path: string): Promise<T> {
         const retried = await fetch(url, {headers: {Authorization: `Bearer ${newJwt}`, Connection: 'close'}});
         if (!retried.ok) {
             const body = await retried.text();
-            throw new Error(`API request failed [${retried.status}]: ${body}`);
+            throw new ApiError(retried.status, `API request failed [${retried.status}]: ${body}`);
         }
         return retried.json() as Promise<T>;
     }
 
     if (!response.ok) {
         const body = await response.text();
-        throw new Error(`API request failed [${response.status}]: ${body}`);
+        throw new ApiError(response.status, `API request failed [${response.status}]: ${body}`);
     }
 
     return response.json() as Promise<T>;
@@ -133,7 +144,7 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
 
     if (!response.ok) {
         const bodyText = await response.text();
-        throw new Error(`API request failed [${response.status}]: ${bodyText}`);
+        throw new ApiError(response.status, `API request failed [${response.status}]: ${bodyText}`);
     }
 
     return response.json() as Promise<T>;
