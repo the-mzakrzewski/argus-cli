@@ -4,7 +4,7 @@ const DEFAULT_HUB_URL = 'http://localhost:3000';
 function warnIfInsecure(url: string): void {
     if (!url.startsWith('http://')) return;
     try {
-        const { hostname } = new URL(url);
+        const {hostname} = new URL(url);
         if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
             process.stderr.write(
                 '⚠ WARNING: ARGUS_API_URL uses insecure HTTP for a non-local address. Use HTTPS in production.\n',

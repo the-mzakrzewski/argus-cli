@@ -92,7 +92,7 @@ async function login(): Promise<void> {
     if (!exchangeRes.ok) {
         throw new Error('Failed to exchange login code for tokens.')
     }
-    const tokens = await exchangeRes.json() as {access_token: string; refresh_token: string}
+    const tokens = await exchangeRes.json() as { access_token: string; refresh_token: string }
     await setTokens(tokens.access_token, tokens.refresh_token)
 
     console.log(chalk.green('Logged in successfully.'))

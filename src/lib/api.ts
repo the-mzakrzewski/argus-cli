@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import {agent} from './http.js';
 import {getEngineBaseUrl} from '../config.js';
-import {requireAuth, refreshTokens} from './auth.js';
+import {refreshTokens, requireAuth} from './auth.js';
 import {getRefreshToken} from './keychain.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -43,7 +43,9 @@ function getRefreshedToken(): Promise<string | null> {
             } catch {
                 return null;
             }
-        })().finally(() => { refreshPromise = null; });
+        })().finally(() => {
+            refreshPromise = null;
+        });
     }
     return refreshPromise;
 }

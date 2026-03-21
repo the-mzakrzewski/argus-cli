@@ -2,10 +2,10 @@ import {Command} from 'commander';
 import path from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
-import {cleanupWorker, generateCompose, runWorker, getContainerErrors} from '../lib/docker.js';
 import type {ContainerError} from '../lib/docker.js';
-import {get, post, postMultipart, ApiError} from '../lib/api.js';
-import {requireAuth, refreshTokens} from '../lib/auth.js';
+import {cleanupWorker, generateCompose, getContainerErrors, runWorker} from '../lib/docker.js';
+import {ApiError, get, post, postMultipart} from '../lib/api.js';
+import {refreshTokens, requireAuth} from '../lib/auth.js';
 import {getRefreshToken} from '../lib/keychain.js';
 import {getEngineBaseUrl, getHubBaseUrl} from '../config.js';
 import type {AuditCreatedResponse, AuditCreateRequest} from '../types/audit.js';
@@ -16,7 +16,9 @@ interface AuditRecipe {
     query: string;
 }
 
-export async function audit({ddlPath, queryPath, keepContainers = false}: AuditCreateRequest & { keepContainers?: boolean }): Promise<void> {
+export async function audit({ddlPath, queryPath, keepContainers = false}: AuditCreateRequest & {
+    keepContainers?: boolean
+}): Promise<void> {
     const resolvedDdl = path.resolve(ddlPath);
     const resolvedQuery = path.resolve(queryPath);
     const toFileField = (filePath: string) => ({filePath, filename: path.basename(filePath)});
@@ -61,7 +63,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
     let composePath: string;
     let tmpTokenPath: string;
     try {
-        ({ composePath, tmpTokenPath } = generateCompose({
+        ({composePath, tmpTokenPath} = generateCompose({
             ddlPath: resolvedDdl,
             auditId: result.public_id,
             apiUrl: getEngineBaseUrl(),
