@@ -2,11 +2,12 @@
 import {Command} from 'commander'
 import http from 'node:http'
 import net from 'node:net'
+import crypto from 'node:crypto'
 import {URL} from 'node:url'
 import open from 'open'
 import chalk from 'chalk'
 import {getAccessToken, setTokens} from '../lib/keychain.js'
-import {getHubBaseUrl} from '../config.js'
+import {getEngineBaseUrl, getHubBaseUrl} from '../config.js'
 
 async function findFreePort(start: number, end: number): Promise<number> {
     for (let port = start; port <= end; port++) {
@@ -23,6 +24,14 @@ async function findFreePort(start: number, end: number): Promise<number> {
     throw new Error(`No free port found in range ${start}-${end}`)
 }
 
+function generateCodeVerifier(): string {
+    return crypto.randomBytes(32).toString('base64url')
+}
+
+function generateCodeChallenge(verifier: string): string {
+    return crypto.createHash('sha256').update(verifier).digest('base64url')
+}
+
 async function login(): Promise<void> {
     const existing = await getAccessToken()
     if (existing) {
@@ -33,16 +42,26 @@ async function login(): Promise<void> {
     const port = await findFreePort(9000, 9100)
     const redirectUri = `http://127.0.0.1:${port}`
 
-    const tokenReceived = new Promise<{ token: string; refreshToken: string }>((resolve, reject) => {
+    const state = crypto.randomBytes(16).toString('hex')
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = generateCodeChallenge(codeVerifier)
+
+    const codeReceived = new Promise<{ code: string }>((resolve, reject) => {
         const server = http.createServer((req, res) => {
             try {
                 const reqUrl = new URL(req.url ?? '/', `http://127.0.0.1:${port}`)
-                const token = reqUrl.searchParams.get('token')
-                const refreshToken = reqUrl.searchParams.get('refresh_token')
+                const code = reqUrl.searchParams.get('code')
+                const returnedState = reqUrl.searchParams.get('state')
 
-                if (!token || !refreshToken) {
+                if (returnedState !== state) {
                     res.writeHead(400, {'Content-Type': 'text/plain'})
-                    res.end('Missing token parameters.')
+                    res.end('Invalid state parameter. Request rejected.')
+                    return
+                }
+
+                if (!code) {
+                    res.writeHead(400, {'Content-Type': 'text/plain'})
+                    res.end('Missing code parameter.')
                     return
                 }
 
@@ -50,7 +69,7 @@ async function login(): Promise<void> {
                 res.end('<!DOCTYPE html><html><body><h2>Login successful. You can close this tab.</h2></body></html>')
 
                 server.close()
-                resolve({token, refreshToken})
+                resolve({code})
             } catch (err) {
                 reject(err)
             }
@@ -59,13 +78,24 @@ async function login(): Promise<void> {
         server.listen(port, '127.0.0.1')
     })
 
-    const loginUrl = `${getHubBaseUrl()}/auth/cli-login?redirect_uri=${encodeURIComponent(redirectUri)}`
+    const loginUrl = `${getHubBaseUrl()}/auth/login?redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&code_challenge=${encodeURIComponent(codeChallenge)}`
     await open(loginUrl)
     console.log(chalk.dim('Opening browser for login... (waiting for callback)'))
 
-    const {token, refreshToken} = await tokenReceived
-    await setTokens(token, refreshToken)
-    console.log(chalk.green('✔ Logged in. Session stored securely.'))
+    const {code} = await codeReceived
+
+    const exchangeRes = await fetch(`${getEngineBaseUrl()}/auth/cli-token`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({code, code_verifier: codeVerifier}),
+    })
+    if (!exchangeRes.ok) {
+        throw new Error('Failed to exchange login code for tokens.')
+    }
+    const tokens = await exchangeRes.json() as {access_token: string; refresh_token: string}
+    await setTokens(tokens.access_token, tokens.refresh_token)
+
+    console.log(chalk.green('Logged in successfully.'))
 }
 
 export function loginCommand(): Command {

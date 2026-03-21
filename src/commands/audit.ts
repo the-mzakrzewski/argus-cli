@@ -59,13 +59,14 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
     // Step 3: prepare Docker environment
     spinner = ora('Preparing Docker environment…').start();
     let composePath: string;
+    let tmpTokenPath: string;
     try {
-        composePath = generateCompose({
+        ({ composePath, tmpTokenPath } = generateCompose({
             ddlPath: resolvedDdl,
             auditId: result.public_id,
             apiUrl: getEngineBaseUrl(),
             authToken,
-        });
+        }));
         spinner.succeed('Docker environment ready');
     } catch (err) {
         spinner.fail((err as Error).message);
@@ -116,7 +117,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
             console.log(chalk.yellow('\nContainers left running. To clean up manually:'));
             console.log(chalk.dim(`  docker compose -f ${composePath} down -v`));
         } else {
-            cleanupWorker({composePath});
+            cleanupWorker({composePath, tmpTokenPath});
         }
     }
 }
