@@ -77,7 +77,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
         // Step 4: run benchmark
         spinner = ora('Running benchmark…').start();
         try {
-            runWorker({composePath});
+            await runWorker({composePath});
             spinner.succeed('Benchmark complete');
         } catch (err) {
             spinner.fail((err as Error).message);

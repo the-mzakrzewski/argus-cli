@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {agent} from './http.js';
 import {getEngineBaseUrl} from '../config.js';
 import {requireAuth, refreshTokens} from './auth.js';
 import {getRefreshToken} from './keychain.js';
@@ -22,10 +23,6 @@ export interface FileField {
 }
 
 export type MultipartField = string | FileField;
-
-type HttpResult =
-    | { kind: 'network_error'; error: string }
-    | { kind: 'response'; ok: boolean; status: number; response: Response };
 
 // ─── Token refresh queue ──────────────────────────────────────────────────────
 //
@@ -51,6 +48,26 @@ function getRefreshedToken(): Promise<string | null> {
     return refreshPromise;
 }
 
+// ─── Core request ─────────────────────────────────────────────────────────────
+
+async function request<T>(perform: (jwt: string) => Promise<Response>): Promise<T> {
+    const jwt = await requireAuth();
+    let response = await perform(jwt);
+
+    if (response.status === 401) {
+        const newJwt = await getRefreshedToken();
+        if (!newJwt) throw new Error('Session expired. Run: argus login');
+        response = await perform(newJwt);
+    }
+
+    if (!response.ok) {
+        const body = await response.text();
+        throw new ApiError(response.status, `API request failed [${response.status}]: ${body}`);
+    }
+
+    return response.json() as Promise<T>;
+}
+
 // ─── Request helpers ──────────────────────────────────────────────────────────
 
 function isFileField(value: MultipartField): value is FileField {
@@ -70,100 +87,36 @@ async function buildForm(fields: Record<string, MultipartField>): Promise<FormDa
     return form;
 }
 
-async function performMultipartFetch(url: string, form: FormData, jwt: string): Promise<HttpResult> {
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            body: form,
-            headers: {Authorization: `Bearer ${jwt}`},
-        });
-        return {kind: 'response', ok: response.ok, status: response.status, response};
-    } catch (error) {
-        return {kind: 'network_error', error: error instanceof Error ? error.message : 'A network error occurred'};
-    }
-}
-
-async function handleResult<T>(result: HttpResult): Promise<T> {
-    if (result.kind === 'network_error') throw new Error(result.error);
-    if (result.ok) return result.response.json() as Promise<T>;
-    const body = await result.response.text();
-    throw new ApiError(result.status, `API request failed [${result.status}]: ${body}`);
-}
-
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function get<T>(path: string): Promise<T> {
-    const jwt = await requireAuth();
+export function get<T>(path: string): Promise<T> {
     const url = `${getEngineBaseUrl()}${path}`;
-
-    // Connection: close ensures a fresh TCP connection — avoids stale keep-alive
-    // connections that can form after a long-running benchmark.
-    const response = await fetch(url, {
-        headers: {Authorization: `Bearer ${jwt}`, Connection: 'close'},
-    });
-
-    if (response.status === 401) {
-        const newJwt = await getRefreshedToken();
-        if (!newJwt) throw new Error('Session expired. Run: argus login');
-        const retried = await fetch(url, {headers: {Authorization: `Bearer ${newJwt}`, Connection: 'close'}});
-        if (!retried.ok) {
-            const body = await retried.text();
-            throw new ApiError(retried.status, `API request failed [${retried.status}]: ${body}`);
-        }
-        return retried.json() as Promise<T>;
-    }
-
-    if (!response.ok) {
-        const body = await response.text();
-        throw new ApiError(response.status, `API request failed [${response.status}]: ${body}`);
-    }
-
-    return response.json() as Promise<T>;
+    return request<T>(jwt => fetch(url, {
+        headers: {Authorization: `Bearer ${jwt}`},
+        dispatcher: agent,
+    } as RequestInit));
 }
 
-export async function post<T>(path: string, body: unknown): Promise<T> {
-    const jwt = await requireAuth();
+export function post<T>(path: string, body: unknown): Promise<T> {
     const url = `${getEngineBaseUrl()}${path}`;
-
-    const performFetch = (token: string) => fetch(url, {
+    return request<T>(jwt => fetch(url, {
         method: 'POST',
         body: JSON.stringify(body),
-        headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-    });
-
-    let response = await performFetch(jwt);
-
-    if (response.status === 401) {
-        const newJwt = await getRefreshedToken();
-        if (!newJwt) throw new Error('Session expired. Run: argus login');
-        response = await performFetch(newJwt);
-    }
-
-    if (!response.ok) {
-        const bodyText = await response.text();
-        throw new ApiError(response.status, `API request failed [${response.status}]: ${bodyText}`);
-    }
-
-    return response.json() as Promise<T>;
+        headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
+        dispatcher: agent,
+    } as RequestInit));
 }
 
 export async function postMultipart<T>(
     path: string,
     fields: Record<string, MultipartField>,
 ): Promise<T> {
-    const [form, jwt] = await Promise.all([buildForm(fields), requireAuth()]);
+    const form = await buildForm(fields);
     const url = `${getEngineBaseUrl()}${path}`;
-
-    const result = await performMultipartFetch(url, form, jwt);
-
-    if (result.kind === 'response' && result.status === 401) {
-        const newJwt = await getRefreshedToken();
-        if (!newJwt) throw new Error('Session expired. Run: argus login');
-        return handleResult<T>(await performMultipartFetch(url, form, newJwt));
-    }
-
-    return handleResult<T>(result);
+    return request<T>(jwt => fetch(url, {
+        method: 'POST',
+        body: form,
+        headers: {Authorization: `Bearer ${jwt}`},
+        dispatcher: agent,
+    } as RequestInit));
 }

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import yaml from 'js-yaml';
 
 interface GenerateComposeOptions {
@@ -74,12 +74,20 @@ export function generateCompose({ ddlPath, auditId, apiUrl, authToken }: Generat
   return { composePath, tmpTokenPath };
 }
 
-export function runWorker({ composePath }: WorkerOptions): void {
-  const up = spawnSync('docker', ['compose', '-f', composePath, 'up', '-d'], { stdio: 'pipe' });
-  if (up.status !== 0) throw new Error('docker compose up failed');
+function spawnAsync(cmd: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: 'pipe' });
+    child.on('close', (code) => {
+      if (code !== 0) reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')} failed`));
+      else resolve();
+    });
+    child.on('error', reject);
+  });
+}
 
-  const wait = spawnSync('docker', ['compose', '-f', composePath, 'wait', 'worker'], { stdio: 'pipe' });
-  if (wait.status !== 0) throw new Error('docker compose wait failed');
+export async function runWorker({ composePath }: WorkerOptions): Promise<void> {
+  await spawnAsync('docker', ['compose', '-f', composePath, 'up', '-d']);
+  await spawnAsync('docker', ['compose', '-f', composePath, 'wait', 'worker']);
 }
 
 export function cleanupWorker({ composePath, tmpTokenPath }: WorkerOptions): void {
