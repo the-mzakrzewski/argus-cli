@@ -67,7 +67,7 @@ async function request<T>(perform: (jwt: string) => Promise<Response>): Promise<
         throw new ApiError(response.status, `API request failed [${response.status}]: ${body}`);
     }
 
-    return response.json() as Promise<T>;
+    return (response.status === 204 ? null : response.json()) as Promise<T>;
 }
 
 // ─── Request helpers ──────────────────────────────────────────────────────────
