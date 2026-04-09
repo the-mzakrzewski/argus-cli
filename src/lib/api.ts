@@ -64,7 +64,20 @@ async function request<T>(perform: (jwt: string) => Promise<Response>): Promise<
 
     if (!response.ok) {
         const body = await response.text();
-        throw new ApiError(response.status, `API request failed [${response.status}]: ${body}`);
+        let message = `API request failed [${response.status}]`;
+        try {
+            const json = JSON.parse(body);
+            if (json.detail?.message) {
+                message = json.detail.message;
+            } else if (json.message) {
+                message = json.message;
+            } else {
+                message = `${message}: ${body}`;
+            }
+        } catch {
+            message = `${message}: ${body}`;
+        }
+        throw new ApiError(response.status, message);
     }
 
     return (response.status === 204 ? null : response.json()) as Promise<T>;
