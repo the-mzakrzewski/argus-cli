@@ -136,7 +136,6 @@ export function auditCommand(): Command {
             try {
                 await audit({ddlPath: options.ddl, queryPath: options.query, keepContainers: options.keepContainers});
             } catch (err) {
-                console.error(chalk.red(`Audit failed: ${(err as Error).message}`));
                 process.exit(1);
             }
         });
