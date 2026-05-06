@@ -1,7 +1,7 @@
 import {Command} from 'commander';
 import path from 'node:path';
 import chalk from 'chalk';
-import ora from 'ora';
+import ora, {type Ora} from 'ora';
 import type {ContainerError} from '../lib/docker.js';
 import {cleanupWorker, generateCompose, getContainerErrors, runWorker} from '../lib/docker.js';
 import {ApiError, get, post, postMultipart} from '../lib/api.js';
@@ -23,8 +23,24 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
     const resolvedQuery = path.resolve(queryPath);
     const toFileField = (filePath: string) => ({filePath, filename: path.basename(filePath)});
 
+    let activeSpinner: Ora | undefined;
+    let composePath: string | undefined;
+    let tmpTokenPath: string | undefined;
+
+    const startSpinner = (text: string): Ora => {
+        activeSpinner = ora({text, discardStdin: false}).start();
+        return activeSpinner;
+    };
+
+    process.on('SIGINT', () => {
+        activeSpinner?.stop();
+        console.log(chalk.yellow('\n✖ Interrupted — stopping containers…'));
+        if (composePath) cleanupWorker({composePath, tmpTokenPath});
+        process.exit(130);
+    });
+
     // Step 1: upload files
-    let spinner = ora('Uploading schema & query, creating audit…').start();
+    let spinner = startSpinner('Uploading schema & query, creating audit…');
     let result: AuditCreatedResponse;
     try {
         result = await postMultipart<AuditCreatedResponse>('/audits', {
@@ -42,7 +58,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
     }
 
     // Step 2: get a fresh token to pass to containers
-    spinner = ora('Refreshing credentials…').start();
+    spinner = startSpinner('Refreshing credentials…');
     let authToken: string;
     try {
         const storedRefreshToken = await getRefreshToken();
@@ -59,9 +75,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
     }
 
     // Step 3: prepare Docker environment
-    spinner = ora('Preparing Docker environment…').start();
-    let composePath: string;
-    let tmpTokenPath: string;
+    spinner = startSpinner('Preparing Docker environment…');
     try {
         ({composePath, tmpTokenPath} = generateCompose({
             ddlPath: resolvedDdl,
@@ -77,7 +91,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
 
     try {
         // Step 4: run benchmark
-        spinner = ora('Running benchmark…').start();
+        spinner = startSpinner('Running benchmark…');
         try {
             await runWorker({composePath});
             spinner.succeed('Benchmark complete');
@@ -86,7 +100,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
             // best-effort: report each container's error to the API
             const containerErrors = getContainerErrors(composePath);
             if (containerErrors.length > 0) {
-                const reportSpinner = ora('Reporting errors…').start();
+                const reportSpinner = startSpinner('Reporting errors…');
                 try {
                     await Promise.all(
                         containerErrors.map((e: ContainerError) =>
@@ -105,7 +119,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
         }
 
         // Step 5: fetch results
-        spinner = ora('Fetching results…').start();
+        spinner = startSpinner('Fetching results…');
         let recipe: AuditRecipe;
         try {
             recipe = await get<AuditRecipe>(`/audits/${result.public_id}/recipe`);
@@ -115,12 +129,17 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
             throw err;
         }
     } finally {
+        if (!composePath) {
+            return
+        }
+
         if (keepContainers) {
             console.log(chalk.yellow('\nContainers left running. To clean up manually:'));
             console.log(chalk.dim(`  docker compose -f ${composePath} down -v`));
         } else {
             cleanupWorker({composePath, tmpTokenPath});
         }
+
     }
 }
 
