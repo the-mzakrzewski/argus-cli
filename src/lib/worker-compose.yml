@@ -1,3 +1,5 @@
+version: '3.9'
+
 name: argus-__RUN_ID__
 
 services:
@@ -5,6 +7,11 @@ services:
     container_name: argus-postgres-__RUN_ID__
     image: postgres:18-alpine
     restart: "no"
+    shm_size: '1gb'
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       POSTGRES_USER: argus
       POSTGRES_PASSWORD: argus
@@ -16,28 +23,56 @@ services:
       interval: 2s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+          pids: 200
+        reservations:
+          memory: 512M
 
   seeder:
     container_name: argus-seeder-__RUN_ID__
     image: argus-worker:latest
     command: argus-seeder
     restart: "no"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://argus:argus@postgres:5432/argus?sslmode=disable
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+          pids: 100
 
   worker:
     container_name: argus-worker-__RUN_ID__
     image: argus-worker:latest
     command: argus-worker
     restart: "no"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       DATABASE_URL: postgres://argus:argus@postgres:5432/argus?sslmode=disable
     depends_on:
       seeder:
         condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+          pids: 100
 
 volumes:
   pg_data:
