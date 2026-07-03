@@ -7,6 +7,7 @@ import {URL} from 'node:url'
 import open from 'open'
 import chalk from 'chalk'
 import {getAccessToken, setTokens} from '../lib/keychain.js'
+import {callbackPage} from '../lib/callback-page.js'
 import {getEngineBaseUrl, getHubBaseUrl} from '../config.js'
 
 async function findFreePort(start: number, end: number): Promise<number> {
@@ -54,19 +55,19 @@ async function login(): Promise<void> {
                 const returnedState = reqUrl.searchParams.get('state')
 
                 if (returnedState !== state) {
-                    res.writeHead(400, {'Content-Type': 'text/plain'})
-                    res.end('Invalid state parameter. Request rejected.')
+                    res.writeHead(400, {'Content-Type': 'text/html; charset=utf-8'})
+                    res.end(callbackPage(false, 'Request rejected', 'The state parameter did not match, so this login attempt was rejected. Return to your terminal and run argus login again.'))
                     return
                 }
 
                 if (!code) {
-                    res.writeHead(400, {'Content-Type': 'text/plain'})
-                    res.end('Missing code parameter.')
+                    res.writeHead(400, {'Content-Type': 'text/html; charset=utf-8'})
+                    res.end(callbackPage(false, 'Login failed', 'No authorization code was received. Return to your terminal and run argus login again.'))
                     return
                 }
 
-                res.writeHead(200, {'Content-Type': 'text/html'})
-                res.end('<!DOCTYPE html><html><body><h2>Login successful. You can close this tab.</h2></body></html>')
+                res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'})
+                res.end(callbackPage(true, 'Login successful', 'You are all set. You can close this tab and return to your terminal.'))
 
                 server.close()
                 resolve({code})
