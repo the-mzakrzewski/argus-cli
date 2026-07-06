@@ -50,7 +50,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
         spinner.succeed(`Audit created · ${chalk.cyan(result.public_id)}`);
     } catch (err) {
         if (err instanceof ApiError && err.status === 402) {
-            spinner.fail('No credits remaining. Visit the Argus website to top up.');
+            spinner.fail('No audits remaining. Visit the Argus website to top up.');
             process.exit(1);
         }
         spinner.fail((err as Error).message);
