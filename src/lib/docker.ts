@@ -9,6 +9,7 @@ interface GenerateComposeOptions {
     auditId: string;
     apiUrl: string;
     authToken: string;
+    postgresImage?: string;
 }
 
 interface WorkerOptions {
@@ -32,7 +33,7 @@ function sanitizeLogs(raw: string): string {
         .replace(/:\/\/[^:]+:[^@]+@/g, '://[REDACTED]:[REDACTED]@');
 }
 
-export function generateCompose({ddlPath, auditId, apiUrl, authToken}: GenerateComposeOptions): {
+export function generateCompose({ddlPath, auditId, apiUrl, authToken, postgresImage}: GenerateComposeOptions): {
     composePath: string;
     tmpTokenPath: string
 } {
@@ -50,6 +51,10 @@ export function generateCompose({ddlPath, auditId, apiUrl, authToken}: GenerateC
 
     const compose = yaml.load(template) as Record<string, unknown>;
     const services = compose.services as Record<string, Record<string, unknown>>;
+
+    if (postgresImage) {
+        services.postgres.image = postgresImage;
+    }
 
     const containerTokenPath = '/run/secrets/auth_token';
     const auditEnv = {

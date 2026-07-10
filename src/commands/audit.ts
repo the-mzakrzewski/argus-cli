@@ -6,6 +6,7 @@ import type {ContainerError} from '../lib/docker.js';
 import {cleanupWorker, generateCompose, getContainerErrors, runWorker} from '../lib/docker.js';
 import {ApiError, get, post, postMultipart} from '../lib/api.js';
 import {refreshTokens, requireAuth} from '../lib/auth.js';
+import {resolvePostgresImage} from '../lib/registry.js';
 import {getRefreshToken} from '../lib/keychain.js';
 import {getEngineBaseUrl, getHubBaseUrl} from '../config.js';
 import type {AuditCreatedResponse, AuditCreateRequest} from '../types/audit.js';
@@ -16,8 +17,9 @@ interface AuditRecipe {
     query: string;
 }
 
-export async function audit({ddlPath, queryPath, keepContainers = false}: AuditCreateRequest & {
-    keepContainers?: boolean
+export async function audit({ddlPath, queryPath, keepContainers = false, postgresVersion}: AuditCreateRequest & {
+    keepContainers?: boolean;
+    postgresVersion?: string;
 }): Promise<void> {
     const resolvedDdl = path.resolve(ddlPath);
     const resolvedQuery = path.resolve(queryPath);
@@ -38,6 +40,19 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
         if (composePath) cleanupWorker({composePath, tmpTokenPath});
         process.exit(130);
     });
+
+    // Step 0: resolve the requested postgres version before anything is created
+    let postgresImage: string | undefined;
+    if (postgresVersion) {
+        const resolveSpinner = startSpinner(`Resolving postgres version ${chalk.cyan(postgresVersion)}…`);
+        try {
+            postgresImage = await resolvePostgresImage(postgresVersion);
+            resolveSpinner.succeed(`Postgres image resolved · ${chalk.cyan(postgresImage)}`);
+        } catch (err) {
+            resolveSpinner.fail((err as Error).message);
+            process.exit(1);
+        }
+    }
 
     // Step 1: upload files
     let spinner = startSpinner('Uploading schema & query, creating audit…');
@@ -82,6 +97,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false}: AuditC
             auditId: result.public_id,
             apiUrl: getEngineBaseUrl(),
             authToken,
+            postgresImage,
         }));
         spinner.succeed('Docker environment ready');
     } catch (err) {
@@ -151,9 +167,15 @@ export function auditCommand(): Command {
         .requiredOption('--ddl <path>', 'Path to DDL file')
         .requiredOption('--query <path>', 'Path to query file')
         .option('--keep-containers', 'Skip docker compose down after benchmark (containers remain running)', false)
-        .action(async (options: { ddl: string; query: string; keepContainers: boolean }) => {
+        .option('--postgres-version <version>', 'PostgreSQL version to benchmark against (e.g. 17, 17.5, 17-bookworm); defaults to 18-alpine')
+        .action(async (options: { ddl: string; query: string; keepContainers: boolean; postgresVersion?: string }) => {
             try {
-                await audit({ddlPath: options.ddl, queryPath: options.query, keepContainers: options.keepContainers});
+                await audit({
+                    ddlPath: options.ddl,
+                    queryPath: options.query,
+                    keepContainers: options.keepContainers,
+                    postgresVersion: options.postgresVersion,
+                });
             } catch (err) {
                 process.exit(1);
             }
