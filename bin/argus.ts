@@ -31,6 +31,8 @@ program
     .description('ARGUS — SQL Stress-Test Auditor. Your SQL is fast — and we have proof.')
     .version(version);
 
+program.addHelpText('after', chalk.dim('\nARGUS currently supports PostgreSQL only.'));
+
 program.addCommand(auditCommand());
 program.addCommand(loginCommand());
 program.addCommand(logoutCommand());
