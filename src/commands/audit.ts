@@ -3,7 +3,7 @@ import path from 'node:path';
 import chalk from 'chalk';
 import ora, {type Ora} from 'ora';
 import type {ContainerError} from '../lib/docker.js';
-import {cleanupWorker, generateCompose, getContainerErrors, runWorker} from '../lib/docker.js';
+import {assertComposeVersion, cleanupWorker, generateCompose, getContainerErrors, runWorker} from '../lib/docker.js';
 import {ApiError, get, post, postMultipart} from '../lib/api.js';
 import {refreshTokens, requireAuth} from '../lib/auth.js';
 import {resolvePostgresImage} from '../lib/registry.js';
@@ -40,6 +40,16 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
         if (composePath) cleanupWorker({composePath, tmpTokenPath});
         process.exit(130);
     });
+
+    // Step 0: preflight — ensure Docker Compose is new enough for `docker compose wait`
+    const composeSpinner = startSpinner('Checking Docker Compose version…');
+    try {
+        assertComposeVersion();
+        composeSpinner.succeed('Docker Compose version OK');
+    } catch (err) {
+        composeSpinner.fail((err as Error).message);
+        process.exit(1);
+    }
 
     // Step 0: resolve the requested postgres version before anything is created
     let postgresImage: string | undefined;

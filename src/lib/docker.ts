@@ -19,6 +19,44 @@ interface WorkerOptions {
 
 const COMPOSE_TEMPLATE_PATH = path.join(import.meta.dirname, 'worker-compose.yml');
 
+// `docker compose ... wait` requires Compose v2.20.0+, so audits cannot run below it.
+export const MIN_COMPOSE_VERSION = '2.20.0';
+const MIN_COMPOSE_PARTS = MIN_COMPOSE_VERSION.split('.').map(Number) as [number, number, number];
+
+/**
+ * Verify the installed Docker Compose is >= MIN_COMPOSE_VERSION.
+ *
+ * Runs `docker compose version --short`, parses the `major.minor.patch` it prints,
+ * and throws a clear, actionable Error when Docker/Compose is missing, the version
+ * cannot be parsed, or it is older than the minimum. Returns nothing on success.
+ */
+export function assertComposeVersion(): void {
+    const result = spawnSync('docker', ['compose', 'version', '--short'], {stdio: 'pipe', encoding: 'utf8'});
+
+    if (result.error || result.status !== 0) {
+        throw new Error(
+            `Docker Compose not found. Install Docker Compose >= ${MIN_COMPOSE_VERSION} to run audits.`,
+        );
+    }
+
+    const match = (result.stdout as string).match(/(\d+)\.(\d+)\.(\d+)/);
+    if (!match) {
+        throw new Error(
+            `Could not determine the Docker Compose version. Ensure Docker Compose >= ${MIN_COMPOSE_VERSION} is installed.`,
+        );
+    }
+
+    const found = [Number(match[1]), Number(match[2]), Number(match[3])] as [number, number, number];
+    for (let i = 0; i < MIN_COMPOSE_PARTS.length; i++) {
+        if (found[i] > MIN_COMPOSE_PARTS[i]) break;
+        if (found[i] < MIN_COMPOSE_PARTS[i]) {
+            throw new Error(
+                `Docker Compose ${found.join('.')} is too old. Argus requires Docker Compose >= ${MIN_COMPOSE_VERSION}. Please upgrade Docker Compose.`,
+            );
+        }
+    }
+}
+
 function toContainerUrl(apiUrl: string): string {
     return apiUrl.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1)(:\d+)/, '$1host.docker.internal$3');
 }
