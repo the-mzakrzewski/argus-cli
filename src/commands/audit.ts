@@ -8,7 +8,7 @@ import {ApiError, get, post, postMultipart} from '../lib/api.js';
 import {refreshTokens, requireAuth} from '../lib/auth.js';
 import {resolvePostgresImage} from '../lib/registry.js';
 import {getRefreshToken} from '../lib/keychain.js';
-import {getEngineBaseUrl, getHubBaseUrl} from '../config.js';
+import {getEngineBaseUrl, getHubBaseUrl, getWorkerImage} from '../config.js';
 import type {AuditCreatedResponse, AuditCreateRequest} from '../types/audit.js';
 
 interface AuditRecipe {
@@ -107,6 +107,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
             auditId: result.public_id,
             apiUrl: getEngineBaseUrl(),
             authToken,
+            workerImage: getWorkerImage(),
             postgresImage,
         }));
         spinner.succeed('Docker environment ready');

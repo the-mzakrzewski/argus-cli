@@ -9,6 +9,7 @@ interface GenerateComposeOptions {
     auditId: string;
     apiUrl: string;
     authToken: string;
+    workerImage: string;
     postgresImage?: string;
 }
 
@@ -71,7 +72,7 @@ function sanitizeLogs(raw: string): string {
         .replace(/:\/\/[^:]+:[^@]+@/g, '://[REDACTED]:[REDACTED]@');
 }
 
-export function generateCompose({ddlPath, auditId, apiUrl, authToken, postgresImage}: GenerateComposeOptions): {
+export function generateCompose({ddlPath, auditId, apiUrl, authToken, workerImage, postgresImage}: GenerateComposeOptions): {
     composePath: string;
     tmpTokenPath: string
 } {
@@ -93,6 +94,9 @@ export function generateCompose({ddlPath, auditId, apiUrl, authToken, postgresIm
     if (postgresImage) {
         services.postgres.image = postgresImage;
     }
+
+    services.seeder.image = workerImage;
+    services.worker.image = workerImage;
 
     const containerTokenPath = '/run/secrets/auth_token';
     const auditEnv = {

@@ -1,6 +1,6 @@
 {
-  "name": "argus-cli",
-  "version": "1.0.0",
+  "name": "@argusaudit/cli",
+  "version": "0.1.1",
   "description": "ARGUS — SQL Stress-Test Auditor. Benchmark-as-a-Service CLI tool that proves SQL optimizations with hard numbers.",
   "type": "module",
   "main": "dist/index.js",
@@ -10,8 +10,15 @@
   "bin": {
     "argus": "./dist/bin/argus.js"
   },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc && cp src/lib/worker-compose.yml dist/src/lib/worker-compose.yml",
+    "prepublishOnly": "pnpm run build",
     "test": "node --test",
     "lint": "eslint ."
   },
@@ -34,8 +41,7 @@
     "url": "https://github.com/the-mzakrzewski/argus-cli/issues"
   },
   "engines": {
-    "node": ">=24.0.0",
-    "pnpm": ">=10.0.0"
+    "node": ">=24.0.0"
   },
   "packageManager": "pnpm@10.7.0",
   "dependencies": {

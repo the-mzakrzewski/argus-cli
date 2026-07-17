@@ -34,7 +34,8 @@ services:
 
   seeder:
     container_name: argus-seeder-__RUN_ID__
-    image: argus-worker:latest
+    # Placeholder — always overwritten by generateCompose from config.ts
+    image: argus-worker:placeholder
     command: argus-seeder
     restart: "no"
     ulimits:
@@ -55,7 +56,8 @@ services:
 
   worker:
     container_name: argus-worker-__RUN_ID__
-    image: argus-worker:latest
+    # Placeholder — always overwritten by generateCompose from config.ts
+    image: argus-worker:placeholder
     command: argus-worker
     restart: "no"
     ulimits:
