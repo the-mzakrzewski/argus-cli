@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import {agent} from './http.js';
+import {agent, fetch, FormData, type Response} from './http.js';
 import {getEngineBaseUrl} from '../config.js';
 import {refreshTokens, requireAuth} from './auth.js';
 import {getRefreshToken} from './keychain.js';
@@ -109,7 +109,7 @@ export function get<T>(path: string): Promise<T> {
     return request<T>(jwt => fetch(url, {
         headers: {Authorization: `Bearer ${jwt}`},
         dispatcher: agent,
-    } as RequestInit));
+    }));
 }
 
 export function post<T>(path: string, body: unknown): Promise<T> {
@@ -119,7 +119,7 @@ export function post<T>(path: string, body: unknown): Promise<T> {
         body: JSON.stringify(body),
         headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
         dispatcher: agent,
-    } as RequestInit));
+    }));
 }
 
 export async function postMultipart<T>(
@@ -133,5 +133,5 @@ export async function postMultipart<T>(
         body: form,
         headers: {Authorization: `Bearer ${jwt}`},
         dispatcher: agent,
-    } as RequestInit));
+    }));
 }

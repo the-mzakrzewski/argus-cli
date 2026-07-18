@@ -8,6 +8,7 @@ import open from 'open'
 import chalk from 'chalk'
 import {getAccessToken, setTokens} from '../lib/keychain.js'
 import {callbackPage} from '../lib/callback-page.js'
+import {describeError} from '../lib/http.js'
 import {getEngineBaseUrl, getHubBaseUrl} from '../config.js'
 
 async function findFreePort(start: number, end: number): Promise<number> {
@@ -108,7 +109,7 @@ export function loginCommand(): Command {
             try {
                 await login()
             } catch (err) {
-                console.error(chalk.red(`Login failed: ${(err as Error).message}`))
+                console.error(chalk.red(`Login failed: ${describeError(err)}`))
                 process.exit(1)
             }
         })

@@ -1,7 +1,7 @@
 // Core authentication logic: token retrieval and silent refresh on 401.
 import {clearTokens, getAccessToken, setTokens} from './keychain.js'
 import {getEngineBaseUrl} from '../config.js'
-import {agent} from './http.js'
+import {agent, fetch} from './http.js'
 
 export async function refreshTokens(refreshToken: string): Promise<string> {
     const url = `${getEngineBaseUrl()}/auth/refresh`
@@ -10,7 +10,7 @@ export async function refreshTokens(refreshToken: string): Promise<string> {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({refresh_token: refreshToken}),
         dispatcher: agent,
-    } as RequestInit)
+    })
 
     if (!response.ok) {
         await clearTokens()

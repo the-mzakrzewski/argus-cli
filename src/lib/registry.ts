@@ -1,5 +1,5 @@
 import {request} from 'undici';
-import {agent} from './http.js';
+import {agent, describeError} from './http.js';
 
 const DOCKER_HUB_TAGS_URL = 'https://hub.docker.com/v2/repositories/library/postgres/tags';
 
@@ -13,7 +13,7 @@ async function tagExists(tag: string): Promise<boolean> {
         statusCode = response.statusCode;
         await response.body.dump();
     } catch (err) {
-        throw new Error(`Could not verify postgres version against Docker Hub: ${(err as Error).message}`);
+        throw new Error(`Could not verify postgres version against Docker Hub: ${describeError(err)}`);
     }
     if (statusCode === 200) return true;
     if (statusCode === 404) return false;

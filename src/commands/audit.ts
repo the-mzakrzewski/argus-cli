@@ -8,6 +8,7 @@ import {ApiError, get, post, postMultipart} from '../lib/api.js';
 import {refreshTokens, requireAuth} from '../lib/auth.js';
 import {resolvePostgresImage} from '../lib/registry.js';
 import {getRefreshToken} from '../lib/keychain.js';
+import {describeError} from '../lib/http.js';
 import {getEngineBaseUrl, getHubBaseUrl, getWorkerImage} from '../config.js';
 import type {AuditCreatedResponse, AuditCreateRequest, AuditStatusResponse} from '../types/audit.js';
 
@@ -99,7 +100,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
         assertComposeVersion();
         composeSpinner.succeed('Docker Compose version OK');
     } catch (err) {
-        composeSpinner.fail((err as Error).message);
+        composeSpinner.fail(describeError(err));
         process.exit(1);
     }
 
@@ -111,7 +112,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
             postgresImage = await resolvePostgresImage(postgresVersion);
             resolveSpinner.succeed(`Postgres image resolved · ${chalk.cyan(postgresImage)}`);
         } catch (err) {
-            resolveSpinner.fail((err as Error).message);
+            resolveSpinner.fail(describeError(err));
             process.exit(1);
         }
     }
@@ -130,7 +131,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
             spinner.fail('No audits remaining. Visit the Argus website to top up.');
             process.exit(1);
         }
-        spinner.fail((err as Error).message);
+        spinner.fail(describeError(err));
         throw err;
     }
 
@@ -140,7 +141,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
         await waitForAnalysis(result.public_id, spinner);
         spinner.succeed('Analysis complete');
     } catch (err) {
-        spinner.fail((err as Error).message);
+        spinner.fail(describeError(err));
         process.exit(1);
     }
 
@@ -157,7 +158,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
         }
         spinner.succeed('Credentials refreshed');
     } catch (err) {
-        spinner.fail((err as Error).message);
+        spinner.fail(describeError(err));
         throw err;
     }
 
@@ -174,7 +175,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
         }));
         spinner.succeed('Docker environment ready');
     } catch (err) {
-        spinner.fail((err as Error).message);
+        spinner.fail(describeError(err));
         throw err;
     }
 
@@ -185,7 +186,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
             await runWorker({composePath});
             spinner.succeed('Benchmark complete');
         } catch (err) {
-            spinner.fail((err as Error).message);
+            spinner.fail(describeError(err));
             // best-effort: report each container's error to the API
             const containerErrors = getContainerErrors(composePath);
             if (containerErrors.length > 0) {
@@ -214,7 +215,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
             recipe = await get<AuditRecipe>(`/audits/${result.public_id}/recipe`);
             spinner.succeed(`Report ready · ${chalk.cyan(`${getHubBaseUrl()}/audits/${recipe.public_id}`)}`);
         } catch (err) {
-            spinner.fail((err as Error).message);
+            spinner.fail(describeError(err));
             throw err;
         }
     } finally {
