@@ -189,7 +189,8 @@ export function getContainerErrors(composePath: string): ContainerError[] {
     try {
         const ps = spawnSync(
             'docker',
-            ['compose', '-f', composePath, 'ps', '--format', 'json'],
+            // --all: since Compose v2.23, `ps` hides exited containers by default
+            ['compose', '-f', composePath, 'ps', '--all', '--format', 'json'],
             {stdio: 'pipe', encoding: 'utf8'},
         );
         if (ps.status !== 0) return [];

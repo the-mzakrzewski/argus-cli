@@ -1,6 +1,6 @@
 {
   "name": "@argusaudit/cli",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "ARGUS — SQL Stress-Test Auditor. Benchmark-as-a-Service CLI tool that proves SQL optimizations with hard numbers.",
   "type": "module",
   "main": "dist/index.js",

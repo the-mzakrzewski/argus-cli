@@ -192,6 +192,10 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
             // best-effort: report each container's error to the API
             const containerErrors = getContainerErrors(composePath);
             if (containerErrors.length > 0) {
+                for (const e of containerErrors) {
+                    console.error(chalk.red(`\n${e.containerName} logs:`));
+                    console.error(chalk.dim(e.errorDetails));
+                }
                 const reportSpinner = startSpinner('Reporting errors…');
                 try {
                     await Promise.all(
