@@ -3,7 +3,7 @@ import path from 'node:path';
 import chalk from 'chalk';
 import ora, {type Ora} from 'ora';
 import type {ContainerError} from '../lib/docker.js';
-import {assertComposeVersion, cleanupWorker, generateCompose, getContainerErrors, runWorker} from '../lib/docker.js';
+import {assertComposeVersion, assertDockerRunning, cleanupWorker, generateCompose, getContainerErrors, runWorker} from '../lib/docker.js';
 import {ApiError, get, post, postMultipart} from '../lib/api.js';
 import {refreshTokens, requireAuth} from '../lib/auth.js';
 import {resolvePostgresImage} from '../lib/registry.js';
@@ -95,10 +95,12 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
     });
 
     // Step 0: preflight — ensure Docker Compose is new enough for `docker compose wait`
-    const composeSpinner = startSpinner('Checking Docker Compose version…');
+    // and the daemon is actually running before anything is created server-side
+    const composeSpinner = startSpinner('Checking Docker environment…');
     try {
         assertComposeVersion();
-        composeSpinner.succeed('Docker Compose version OK');
+        assertDockerRunning();
+        composeSpinner.succeed('Docker environment OK');
     } catch (err) {
         composeSpinner.fail(describeError(err));
         process.exit(1);

@@ -58,6 +58,21 @@ export function assertComposeVersion(): void {
     }
 }
 
+/**
+ * Verify the Docker daemon is reachable. `docker compose version` is
+ * client-only, so a stopped Docker Desktop passes the version check and only
+ * fails later at `up` — after an audit has already been created.
+ */
+export function assertDockerRunning(): void {
+    const result = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], {stdio: 'pipe', encoding: 'utf8'});
+
+    if (result.error || result.status !== 0) {
+        throw new Error(
+            'Docker daemon is not reachable. Start Docker Desktop (with Linux containers) and try again.',
+        );
+    }
+}
+
 function toContainerUrl(apiUrl: string): string {
     return apiUrl.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1)(:\d+)/, '$1host.docker.internal$3');
 }
