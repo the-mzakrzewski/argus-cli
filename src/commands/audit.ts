@@ -9,12 +9,64 @@ import {refreshTokens, requireAuth} from '../lib/auth.js';
 import {resolvePostgresImage} from '../lib/registry.js';
 import {getRefreshToken} from '../lib/keychain.js';
 import {getEngineBaseUrl, getHubBaseUrl, getWorkerImage} from '../config.js';
-import type {AuditCreatedResponse, AuditCreateRequest} from '../types/audit.js';
+import type {AuditCreatedResponse, AuditCreateRequest, AuditStatusResponse} from '../types/audit.js';
 
 interface AuditRecipe {
     public_id: string;
     status: string;
     query: string;
+}
+
+const ANALYSIS_INITIAL_POLL_DELAY_MS = 15_000;
+const ANALYSIS_POLL_INTERVAL_MS = 5_000;
+const ANALYSIS_SPINNER_TEXT_INTERVAL_MS = 7_000;
+const ANALYSIS_TIMEOUT_MS = 10 * 60 * 1_000;
+
+const ANALYSIS_SPINNER_MESSAGES = [
+    'We are cooking…',
+    'Crunching your query…',
+    'Brewing query variants…',
+    'Consulting the query planner…',
+    'Sharpening the indexes…',
+];
+
+const randomAnalysisMessage = (): string =>
+    ANALYSIS_SPINNER_MESSAGES[Math.floor(Math.random() * ANALYSIS_SPINNER_MESSAGES.length)];
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Blocks until the engine has generated the recipe and variants.
+ * `POST /audits` returns immediately with status `pending`; the LLM work runs on a worker.
+ */
+async function waitForAnalysis(publicId: string, spinner: Ora): Promise<void> {
+    const deadline = Date.now() + ANALYSIS_TIMEOUT_MS;
+
+    const spinnerTextTimer = setInterval(() => {
+        spinner.text = randomAnalysisMessage();
+    }, ANALYSIS_SPINNER_TEXT_INTERVAL_MS);
+
+    try {
+        let pollDelay = ANALYSIS_INITIAL_POLL_DELAY_MS;
+
+        for (; ;) {
+            const audit = await get<AuditStatusResponse>(`/audits/${publicId}`);
+
+            if (audit.status === 'ready') return;
+            if (audit.status === 'failed') {
+                throw new Error(audit.failure_reason ?? 'Analysis failed');
+            }
+
+            if (Date.now() >= deadline) {
+                throw new Error('Timed out after 10 minutes waiting for analysis');
+            }
+
+            await sleep(pollDelay);
+            pollDelay = ANALYSIS_POLL_INTERVAL_MS;
+        }
+    } finally {
+        clearInterval(spinnerTextTimer);
+    }
 }
 
 export async function audit({ddlPath, queryPath, keepContainers = false, postgresVersion}: AuditCreateRequest & {
@@ -82,7 +134,17 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
         throw err;
     }
 
-    // Step 2: get a fresh token to pass to containers
+    // Step 2: wait for the engine to analyze the query and generate variants
+    spinner = startSpinner('Analyzing query & generating variants…');
+    try {
+        await waitForAnalysis(result.public_id, spinner);
+        spinner.succeed('Analysis complete');
+    } catch (err) {
+        spinner.fail((err as Error).message);
+        process.exit(1);
+    }
+
+    // Step 3: get a fresh token to pass to containers
     spinner = startSpinner('Refreshing credentials…');
     let authToken: string;
     try {
@@ -99,7 +161,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
         throw err;
     }
 
-    // Step 3: prepare Docker environment
+    // Step 4: prepare Docker environment
     spinner = startSpinner('Preparing Docker environment…');
     try {
         ({composePath, tmpTokenPath} = generateCompose({
@@ -117,7 +179,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
     }
 
     try {
-        // Step 4: run benchmark
+        // Step 5: run benchmark
         spinner = startSpinner('Running benchmark…');
         try {
             await runWorker({composePath});
@@ -145,7 +207,7 @@ export async function audit({ddlPath, queryPath, keepContainers = false, postgre
             throw err;
         }
 
-        // Step 5: fetch results
+        // Step 6: fetch results
         spinner = startSpinner('Fetching results…');
         let recipe: AuditRecipe;
         try {
