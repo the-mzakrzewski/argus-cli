@@ -126,10 +126,18 @@ export function generateCompose({ddlPath, auditId, apiUrl, authToken, workerImag
 
 function spawnAsync(cmd: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-        const child = spawn(cmd, args, {stdio: 'pipe'});
+        const child = spawn(cmd, args, {stdio: ['ignore', 'ignore', 'pipe']});
+        let stderr = '';
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk;
+        });
         child.on('close', (code) => {
-            if (code !== 0) reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')} failed`));
-            else resolve();
+            if (code !== 0) {
+                const detail = sanitizeLogs(stderr.trim());
+                reject(new Error(
+                    `${cmd} ${args.join(' ')} failed (exit code ${code})${detail ? `:\n${detail}` : ''}`,
+                ));
+            } else resolve();
         });
         child.on('error', reject);
     });
@@ -171,11 +179,14 @@ export function getContainerErrors(composePath: string): ContainerError[] {
         );
         if (ps.status !== 0) return [];
 
-        const containers: Array<{ Service: string; ExitCode: number }> = (ps.stdout as string)
-            .trim()
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => JSON.parse(line));
+        // Compose 2.20.x prints a JSON array; 2.21+ prints one JSON object per line.
+        const psOutput = (ps.stdout as string).trim();
+        const containers: Array<{ Service: string; ExitCode: number }> = psOutput.startsWith('[')
+            ? JSON.parse(psOutput)
+            : psOutput
+                .split('\n')
+                .filter(Boolean)
+                .map((line) => JSON.parse(line));
 
         return containers
             .filter((c) => c.ExitCode !== 0)
