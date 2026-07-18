@@ -18,6 +18,7 @@
   },
   "scripts": {
     "build": "tsc && cp src/lib/worker-compose.yml dist/src/lib/worker-compose.yml",
+    "dev": "pnpm run build && node --env-file-if-exists=.env.local dist/bin/argus.js",
     "prepublishOnly": "pnpm run build",
     "test": "node --test",
     "lint": "eslint ."

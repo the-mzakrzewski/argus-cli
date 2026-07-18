@@ -18,6 +18,15 @@ npm link                # puts `argus` on your PATH, pointing at this tree
 
 Escape hatches for local development. Deliberately undocumented in the README: end users have no reason to redirect the CLI at another API, and publishing the knob invites pointing it somewhere untrusted.
 
+The easiest way to set them is a `.env.local` file:
+
+```bash
+cp .env.example .env.local   # then adjust values as needed
+pnpm dev audit ...           # rebuilds, then runs with .env.local loaded
+```
+
+`pnpm dev` loads the file via Node's native `--env-file-if-exists` — no dotenv dependency, and it silently skips the file if it doesn't exist. Run it from the repo root: the path resolves relative to the current directory. Variables already exported in your shell take precedence over the file.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ARGUS_API_URL` | `https://api.argusaudit.dev/api/v1` | Engine API base URL. Set to `http://localhost:8000/api/v1` to run against a local engine. |
