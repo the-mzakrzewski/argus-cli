@@ -108,6 +108,13 @@ export function generateCompose({ddlPath, auditId, apiUrl, authToken, workerImag
 
     if (postgresImage) {
         services.postgres.image = postgresImage;
+        // Pre-18 images still expect the volume at /var/lib/postgresql/data;
+        // the template mounts at /var/lib/postgresql for 18+. Unparseable tags
+        // (e.g. "latest") are current majors, so they keep the 18+ path.
+        const major = Number.parseInt(postgresImage.split(':')[1] ?? '', 10);
+        if (major < 18) {
+            services.postgres.volumes = ['pg_data:/var/lib/postgresql/data'];
+        }
     }
 
     services.seeder.image = workerImage;
